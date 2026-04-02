@@ -2,7 +2,8 @@ import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import { StackProps } from 'aws-cdk-lib';
 import * as s3 from 'aws-cdk-lib/aws-s3';
-import * as iam from 'aws-cdk-lib/aws-iam';
+import * as sqs from 'aws-cdk-lib/aws-sqs';
+import * as s3n from 'aws-cdk-lib/aws-s3-notifications';
 
 interface S3StackProps extends StackProps {
   environment: string;
@@ -10,29 +11,23 @@ interface S3StackProps extends StackProps {
 
 export class S3Stack extends cdk.Stack {
   readonly omeroImagesBucket: s3.Bucket;
+  readonly importQueue: sqs.Queue;
+  readonly importDlq: sqs.Queue;
 
   constructor(scope: Construct, id: string, props: S3StackProps) {
     super(scope, id, props);
 
-    // Bucket principal para imágenes .ndpi (hasta 5GB por archivo)
     this.omeroImagesBucket = new s3.Bucket(this, 'OmeroImagesBucket', {
       bucketName: `s3-omero-${props.environment}-images`,
       encryption: s3.BucketEncryption.S3_MANAGED,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
-      publicReadAccess: false,
-      removalPolicy: cdk.RemovalPolicy.RETAIN, // imágenes críticas, no eliminar
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
       versioned: false,
       lifecycleRules: [
         {
           transitions: [
-            {
-              storageClass: s3.StorageClass.INFREQUENT_ACCESS,
-              transitionAfter: cdk.Duration.days(30),
-            },
-            {
-              storageClass: s3.StorageClass.GLACIER_INSTANT_RETRIEVAL,
-              transitionAfter: cdk.Duration.days(90),
-            },
+            { storageClass: s3.StorageClass.INFREQUENT_ACCESS, transitionAfter: cdk.Duration.days(30) },
+            { storageClass: s3.StorageClass.GLACIER_INSTANT_RETRIEVAL, transitionAfter: cdk.Duration.days(90) },
           ],
         },
       ],
@@ -45,6 +40,23 @@ export class S3Stack extends cdk.Stack {
         },
       ],
     });
+
+    this.importDlq = new sqs.Queue(this, 'ImportDlq', {
+      queueName: `sqs-omero-import-dlq-${props.environment}`,
+      retentionPeriod: cdk.Duration.days(14),
+    });
+
+    this.importQueue = new sqs.Queue(this, 'ImportQueue', {
+      queueName: `sqs-omero-import-${props.environment}`,
+      visibilityTimeout: cdk.Duration.minutes(15),
+      deadLetterQueue: { queue: this.importDlq, maxReceiveCount: 3 },
+    });
+
+    this.omeroImagesBucket.addEventNotification(
+      s3.EventType.OBJECT_CREATED,
+      new s3n.SqsDestination(this.importQueue),
+      { prefix: 'import/' },
+    );
 
     new cdk.CfnOutput(this, 'OmeroImagesBucketName', {
       value: this.omeroImagesBucket.bucketName,

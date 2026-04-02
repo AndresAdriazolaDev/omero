@@ -17,7 +17,7 @@ export class VpcStack extends cdk.Stack {
       vpcName: `vpc-omero-${props.environment}`,
       ipAddresses: ec2.IpAddresses.cidr('10.0.0.0/16'),
       maxAzs: 2,
-      natGateways: 1, // mínimo para reducir costos (~$32 USD/mes)
+      natGateways: 1,
       subnetConfiguration: [
         {
           name: `omero-${props.environment}-public`,
@@ -35,6 +35,9 @@ export class VpcStack extends cdk.Stack {
           cidrMask: 24,
         },
       ],
+      gatewayEndpoints: {
+        S3: { service: ec2.GatewayVpcEndpointAwsService.S3 },
+      },
     });
 
     new cdk.CfnOutput(this, 'VpcId', {

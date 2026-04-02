@@ -22,7 +22,10 @@ import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as events from 'aws-cdk-lib/aws-events';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
+import * as sqs from 'aws-cdk-lib/aws-sqs';
+import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
 import * as servicediscovery from 'aws-cdk-lib/aws-servicediscovery';
+import * as path from 'path';
 
 export interface FargateStackProps extends StackProps {
   environment: string;
@@ -31,6 +34,7 @@ export interface FargateStackProps extends StackProps {
   omeroWebRepo: Repository;
   omeroPostgresRepo: Repository;
   omeroImagesBucket: s3.Bucket;
+  importQueue: sqs.Queue;
   domainName?: string;
   hostedZoneId?: string;
   hostedZoneName?: string;
@@ -45,20 +49,18 @@ export class FargateStack extends cdk.Stack {
 
     const vpc = props.vpc;
 
-    // ── Cloud Map namespace ───────────────────────────────────────────────────
     const namespace = new servicediscovery.PrivateDnsNamespace(this, 'Namespace', {
       name: `omero-${props.environment}.local`,
       vpc,
     });
 
-    // ── Cluster ───────────────────────────────────────────────────────────────
     const cluster = new Cluster(this, 'Cluster', {
       vpc,
       clusterName: `ecs-cluster-omero-${props.environment}`,
       containerInsights: false,
     });
 
-    // ── EFS para persistencia de PostgreSQL ───────────────────────────────────
+    // ── EFS para PostgreSQL ───────────────────────────────────────────────────
     const efsSg = new SecurityGroup(this, 'EfsSg', {
       vpc,
       securityGroupName: `omero-${props.environment}-efs-sg`,
@@ -82,7 +84,7 @@ export class FargateStack extends cdk.Stack {
       posixUser: { gid: '999', uid: '999' },
     });
 
-    // ── IAM Task Role compartido ──────────────────────────────────────────────
+    // ── IAM Task Role ─────────────────────────────────────────────────────────
     const taskRole = new Role(this, 'TaskRole', {
       roleName: `ecs-taskRole-omero-${props.environment}`,
       assumedBy: new ServicePrincipal('ecs-tasks.amazonaws.com'),
@@ -91,19 +93,12 @@ export class FargateStack extends cdk.Stack {
     taskRole.addToPolicy(new PolicyStatement({
       effect: Effect.ALLOW,
       actions: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject', 's3:ListBucket'],
-      resources: [
-        props.omeroImagesBucket.bucketArn,
-        `${props.omeroImagesBucket.bucketArn}/*`,
-      ],
+      resources: [props.omeroImagesBucket.bucketArn, `${props.omeroImagesBucket.bucketArn}/*`],
     }));
 
     taskRole.addToPolicy(new PolicyStatement({
       effect: Effect.ALLOW,
-      actions: [
-        'elasticfilesystem:ClientMount',
-        'elasticfilesystem:ClientWrite',
-        'elasticfilesystem:ClientRootAccess',
-      ],
+      actions: ['elasticfilesystem:ClientMount', 'elasticfilesystem:ClientWrite', 'elasticfilesystem:ClientRootAccess'],
       resources: [efsFileSystem.fileSystemArn],
     }));
 
@@ -111,12 +106,9 @@ export class FargateStack extends cdk.Stack {
       effect: Effect.ALLOW,
       resources: ['*'],
       actions: [
-        'ecr:GetAuthorizationToken',
-        'ecr:BatchCheckLayerAvailability',
-        'ecr:GetDownloadUrlForLayer',
-        'ecr:BatchGetImage',
-        'logs:CreateLogStream',
-        'logs:PutLogEvents',
+        'ecr:GetAuthorizationToken', 'ecr:BatchCheckLayerAvailability',
+        'ecr:GetDownloadUrlForLayer', 'ecr:BatchGetImage',
+        'logs:CreateLogStream', 'logs:PutLogEvents',
         'secretsmanager:GetSecretValue',
       ],
     });
@@ -193,12 +185,11 @@ export class FargateStack extends cdk.Stack {
       });
     }
 
-    // ── Secrets ───────────────────────────────────────────────────────────────
     const omeroSecrets = secretsmanager.Secret.fromSecretNameV2(
       this, 'OmeroSecrets', `omero-${props.environment}-secrets`
     );
 
-    // ── POSTGRES task ─────────────────────────────────────────────────────────
+    // ── POSTGRES ──────────────────────────────────────────────────────────────
     const postgresTaskDef = new FargateTaskDefinition(this, 'PostgresTaskDef', {
       taskRole,
       cpu: 256,
@@ -219,17 +210,11 @@ export class FargateStack extends cdk.Stack {
       image: ContainerImage.fromEcrRepository(props.omeroPostgresRepo, 'latest'),
       logging,
       environment: { POSTGRES_DB: 'omero', POSTGRES_USER: 'omero' },
-      secrets: {
-        POSTGRES_PASSWORD: EcsSecret.fromSecretsManager(omeroSecrets, 'POSTGRES_PASSWORD'),
-      },
+      secrets: { POSTGRES_PASSWORD: EcsSecret.fromSecretsManager(omeroSecrets, 'POSTGRES_PASSWORD') },
       stopTimeout: cdk.Duration.seconds(30),
     });
     postgresContainer.addPortMappings({ containerPort: 5432, protocol: Protocol.TCP, name: 'postgres' });
-    postgresContainer.addMountPoints({
-      sourceVolume: 'postgres-data',
-      containerPath: '/var/lib/postgresql/data',
-      readOnly: false,
-    });
+    postgresContainer.addMountPoints({ sourceVolume: 'postgres-data', containerPath: '/var/lib/postgresql/data', readOnly: false });
 
     new FargateService(this, 'PostgresService', {
       cluster,
@@ -248,7 +233,7 @@ export class FargateStack extends cdk.Stack {
       },
     });
 
-    // ── OMERO SERVER task ─────────────────────────────────────────────────────
+    // ── OMERO SERVER ──────────────────────────────────────────────────────────
     const serverTaskDef = new FargateTaskDefinition(this, 'ServerTaskDef', {
       taskRole,
       cpu: 1024,
@@ -295,7 +280,7 @@ export class FargateStack extends cdk.Stack {
       },
     });
 
-    // ── OMERO WEB task ────────────────────────────────────────────────────────
+    // ── OMERO WEB ─────────────────────────────────────────────────────────────
     const webTaskDef = new FargateTaskDefinition(this, 'WebTaskDef', {
       taskRole,
       cpu: 512,
@@ -313,7 +298,7 @@ export class FargateStack extends cdk.Stack {
         CONFIG_omero_web_open_with: '[{"name": "iViewer", "supported_objects": ["image"], "url": "iviewer_index"}]',
         CONFIG_omero_web_wsgi__timeout: '600',
         CONFIG_omero_web_session__engine: 'django.contrib.sessions.backends.file',
-        CONFIG_omero_web_csrf__trusted__origins: '["https://omero.teleinforme-dev.minsal.cl", "https://*.minsal.cl"]',
+        CONFIG_omero_web_csrf__trusted__origins: `["https://${props.domainName ?? '*'}"]`,
         CONFIG_omero_web_allowed__hosts: '["*"]',
         CONFIG_omero_web_use__x__forwarded__host: 'true',
         CONFIG_omero_web_secure__proxy__ssl__header: '["HTTP_X_FORWARDED_PROTO", "https"]',
@@ -336,7 +321,78 @@ export class FargateStack extends cdk.Stack {
       enableExecuteCommand: true,
     });
 
-    // ── Lambda auto-registro cross-VPC ────────────────────────────────────────
+    // ── Import Task efímero ───────────────────────────────────────────────────
+    const importTaskDef = new FargateTaskDefinition(this, 'ImportTaskDef', {
+      taskRole,
+      cpu: 1024,
+      memoryLimitMiB: 2048,
+      family: `ecs-td-omero-import-${props.environment}`,
+      ephemeralStorageGiB: 21,
+    });
+    importTaskDef.addToExecutionRolePolicy(executionRolePolicy);
+
+    importTaskDef.addContainer('omero-import', {
+      image: ContainerImage.fromEcrRepository(props.omeroServerRepo, 'latest'),
+      logging,
+      essential: true,
+      entryPoint: ['/bin/bash', '-c'],
+      command: ['echo ready'],
+      environment: {
+        OMERO_SERVER: `server.omero-${props.environment}.local`,
+      },
+      secrets: {
+        ROOTPASS: EcsSecret.fromSecretsManager(omeroSecrets, 'OMERO_ROOT_PASSWORD'),
+      },
+    });
+
+    // ── Lambda importación via ECS run_task ───────────────────────────────────
+    const importLambda = new lambda.Function(this, 'ImportLambda', {
+      runtime: lambda.Runtime.PYTHON_3_13,
+      handler: 'fargate_import.handler',
+      timeout: cdk.Duration.minutes(1),
+      functionName: `lambda-omero-import-${props.environment}`,
+      reservedConcurrentExecutions: 1,
+      environment: {
+        CLUSTER: `ecs-cluster-omero-${props.environment}`,
+        TASK_DEF: importTaskDef.taskDefinitionArn,
+        SUBNET: vpc.privateSubnets[0].subnetId,
+        SECURITY_GROUP: ecsSg.securityGroupId,
+        OMERO_SERVER: `server.omero-${props.environment}.local`,
+        SECRET_ID: `omero-${props.environment}-secrets`,
+        REGION: this.region,
+      },
+      code: lambda.Code.fromAsset(path.join(__dirname, '../../lambda')),
+    });
+
+    importLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: ['ecs:RunTask'],
+      resources: [importTaskDef.taskDefinitionArn],
+    }));
+
+    importLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: ['iam:PassRole'],
+      resources: [taskRole.roleArn, importTaskDef.executionRole!.roleArn],
+    }));
+
+    importLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: ['s3:GetObject'],
+      resources: [`${props.omeroImagesBucket.bucketArn}/import/*`],
+    }));
+
+    importLambda.addToRolePolicy(new PolicyStatement({
+      effect: Effect.ALLOW,
+      actions: ['secretsmanager:GetSecretValue'],
+      resources: [`arn:aws:secretsmanager:${this.region}:${this.account}:secret:omero-${props.environment}-secrets*`],
+    }));
+
+    importLambda.addEventSource(new lambdaEventSources.SqsEventSource(props.importQueue, {
+      batchSize: 1,
+    }));
+
+    // ── Lambda auto-registro ALB ──────────────────────────────────────────────
     const autoRegisterLambda = new lambda.Function(this, 'AutoRegisterTargets', {
       runtime: lambda.Runtime.PYTHON_3_13,
       handler: 'index.handler',
@@ -391,7 +447,6 @@ def handler(event, context):
       targets: [new targets.LambdaFunction(autoRegisterLambda)],
     });
 
-    // ── Route53 (opcional) ────────────────────────────────────────────────────
     if (props.domainName && props.hostedZoneId && props.hostedZoneName) {
       const hostedZone = route53.HostedZone.fromHostedZoneAttributes(this, 'HostedZone', {
         hostedZoneId: props.hostedZoneId,
