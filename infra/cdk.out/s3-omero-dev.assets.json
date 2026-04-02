@@ -1,0 +1,21 @@
+{
+  "version": "53.0.0",
+  "files": {
+    "b7331237c3a5ad8e0ba2d5c7e3336376fb9a2a1396da482d15f27fb0bc553852": {
+      "displayName": "s3-omero-dev Template",
+      "source": {
+        "path": "s3-omero-dev.template.json",
+        "packaging": "file"
+      },
+      "destinations": {
+        "250121277045-us-east-1-10bb3f87": {
+          "bucketName": "cdk-hnb659fds-assets-250121277045-us-east-1",
+          "objectKey": "b7331237c3a5ad8e0ba2d5c7e3336376fb9a2a1396da482d15f27fb0bc553852.json",
+          "region": "us-east-1",
+          "assumeRoleArn": "arn:${AWS::Partition}:iam::250121277045:role/cdk-hnb659fds-file-publishing-role-250121277045-us-east-1"
+        }
+      }
+    }
+  },
+  "dockerImages": {}
+}

@@ -1,0 +1,137 @@
+{
+ "Resources": {
+  "OmeroImagesBucket845F39CC": {
+   "Type": "AWS::S3::Bucket",
+   "Properties": {
+    "BucketEncryption": {
+     "ServerSideEncryptionConfiguration": [
+      {
+       "ServerSideEncryptionByDefault": {
+        "SSEAlgorithm": "AES256"
+       }
+      }
+     ]
+    },
+    "BucketName": "s3-omero-dev-images",
+    "CorsConfiguration": {
+     "CorsRules": [
+      {
+       "AllowedHeaders": [
+        "*"
+       ],
+       "AllowedMethods": [
+        "GET",
+        "PUT",
+        "HEAD"
+       ],
+       "AllowedOrigins": [
+        "*"
+       ],
+       "MaxAge": 3000
+      }
+     ]
+    },
+    "LifecycleConfiguration": {
+     "Rules": [
+      {
+       "Status": "Enabled",
+       "Transitions": [
+        {
+         "StorageClass": "STANDARD_IA",
+         "TransitionInDays": 30
+        },
+        {
+         "StorageClass": "GLACIER_IR",
+         "TransitionInDays": 90
+        }
+       ]
+      }
+     ]
+    },
+    "PublicAccessBlockConfiguration": {
+     "BlockPublicAcls": true,
+     "BlockPublicPolicy": true,
+     "IgnorePublicAcls": true,
+     "RestrictPublicBuckets": true
+    }
+   },
+   "UpdateReplacePolicy": "Retain",
+   "DeletionPolicy": "Retain",
+   "Metadata": {
+    "aws:cdk:path": "s3-omero-dev/OmeroImagesBucket/Resource"
+   }
+  },
+  "CDKMetadata": {
+   "Type": "AWS::CDK::Metadata",
+   "Properties": {
+    "Analytics": "v2:deflate64:H4sIAAAAAAAA/yXGQQ5AMBAAwLe4t4slHsADJDxAqiqpUmK3HKR/F3GaQcCygixRN0k9ObnaEZ6elXZC3TRQAU8dtDMsmtn/i1/bwEfgKPw+GVgovRABc8iShayVZ/BsNwPd7wtHdwRKZQAAAA=="
+   },
+   "Metadata": {
+    "aws:cdk:path": "s3-omero-dev/CDKMetadata/Default"
+   }
+  }
+ },
+ "Outputs": {
+  "OmeroImagesBucketName": {
+   "Value": {
+    "Ref": "OmeroImagesBucket845F39CC"
+   },
+   "Export": {
+    "Name": "s3-omero-dev-images-bucket"
+   }
+  },
+  "ExportsOutputFnGetAttOmeroImagesBucket845F39CCArn0FF34953": {
+   "Value": {
+    "Fn::GetAtt": [
+     "OmeroImagesBucket845F39CC",
+     "Arn"
+    ]
+   },
+   "Export": {
+    "Name": "s3-omero-dev:ExportsOutputFnGetAttOmeroImagesBucket845F39CCArn0FF34953"
+   }
+  },
+  "ExportsOutputRefOmeroImagesBucket845F39CC5C6DE278": {
+   "Value": {
+    "Ref": "OmeroImagesBucket845F39CC"
+   },
+   "Export": {
+    "Name": "s3-omero-dev:ExportsOutputRefOmeroImagesBucket845F39CC5C6DE278"
+   }
+  }
+ },
+ "Parameters": {
+  "BootstrapVersion": {
+   "Type": "AWS::SSM::Parameter::Value<String>",
+   "Default": "/cdk-bootstrap/hnb659fds/version",
+   "Description": "Version of the CDK Bootstrap resources in this environment, automatically retrieved from SSM Parameter Store. [cdk:skip]"
+  }
+ },
+ "Rules": {
+  "CheckBootstrapVersion": {
+   "Assertions": [
+    {
+     "Assert": {
+      "Fn::Not": [
+       {
+        "Fn::Contains": [
+         [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5"
+         ],
+         {
+          "Ref": "BootstrapVersion"
+         }
+        ]
+       }
+      ]
+     },
+     "AssertDescription": "CDK bootstrap stack version 6 required. Please run 'cdk bootstrap' with a recent version of the CDK CLI."
+    }
+   ]
+  }
+ }
+}

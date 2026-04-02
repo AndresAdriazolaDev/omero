@@ -1,0 +1,142 @@
+{
+ "Resources": {
+  "OmeroServerRepoA3E0977D": {
+   "Type": "AWS::ECR::Repository",
+   "Properties": {
+    "ImageTagMutability": "MUTABLE",
+    "RepositoryName": "ecr-omero-server-dev"
+   },
+   "UpdateReplacePolicy": "Retain",
+   "DeletionPolicy": "Retain",
+   "Metadata": {
+    "aws:cdk:path": "ecr-omero-dev/OmeroServerRepo/Resource"
+   }
+  },
+  "OmeroWebRepoC29DD82D": {
+   "Type": "AWS::ECR::Repository",
+   "Properties": {
+    "ImageTagMutability": "MUTABLE",
+    "RepositoryName": "ecr-omero-web-dev"
+   },
+   "UpdateReplacePolicy": "Retain",
+   "DeletionPolicy": "Retain",
+   "Metadata": {
+    "aws:cdk:path": "ecr-omero-dev/OmeroWebRepo/Resource"
+   }
+  },
+  "OmeroPostgresRepo5A757DF1": {
+   "Type": "AWS::ECR::Repository",
+   "Properties": {
+    "ImageTagMutability": "MUTABLE",
+    "RepositoryName": "ecr-omero-postgres-dev"
+   },
+   "UpdateReplacePolicy": "Retain",
+   "DeletionPolicy": "Retain",
+   "Metadata": {
+    "aws:cdk:path": "ecr-omero-dev/OmeroPostgresRepo/Resource"
+   }
+  },
+  "CDKMetadata": {
+   "Type": "AWS::CDK::Metadata",
+   "Properties": {
+    "Analytics": "v2:deflate64:H4sIAAAAAAAA/zPSMzIx0zNQTCwv1k1OydbNyUzSqw4uSUzO1kksL45PTS7Sqw5KLcgvzizJL6rUcU7LQ/Bqa3Xy8lNS9bKK9cuMjPSMDPUMFLOKMzN1i0rzSjJzU/WCIDQAO58Q22QAAAA="
+   },
+   "Metadata": {
+    "aws:cdk:path": "ecr-omero-dev/CDKMetadata/Default"
+   }
+  }
+ },
+ "Outputs": {
+  "ExportsOutputFnGetAttOmeroPostgresRepo5A757DF1Arn57A2BB67": {
+   "Value": {
+    "Fn::GetAtt": [
+     "OmeroPostgresRepo5A757DF1",
+     "Arn"
+    ]
+   },
+   "Export": {
+    "Name": "ecr-omero-dev:ExportsOutputFnGetAttOmeroPostgresRepo5A757DF1Arn57A2BB67"
+   }
+  },
+  "ExportsOutputRefOmeroPostgresRepo5A757DF17C1A8082": {
+   "Value": {
+    "Ref": "OmeroPostgresRepo5A757DF1"
+   },
+   "Export": {
+    "Name": "ecr-omero-dev:ExportsOutputRefOmeroPostgresRepo5A757DF17C1A8082"
+   }
+  },
+  "ExportsOutputFnGetAttOmeroServerRepoA3E0977DArn74B043B5": {
+   "Value": {
+    "Fn::GetAtt": [
+     "OmeroServerRepoA3E0977D",
+     "Arn"
+    ]
+   },
+   "Export": {
+    "Name": "ecr-omero-dev:ExportsOutputFnGetAttOmeroServerRepoA3E0977DArn74B043B5"
+   }
+  },
+  "ExportsOutputRefOmeroServerRepoA3E0977D3E1A5F7E": {
+   "Value": {
+    "Ref": "OmeroServerRepoA3E0977D"
+   },
+   "Export": {
+    "Name": "ecr-omero-dev:ExportsOutputRefOmeroServerRepoA3E0977D3E1A5F7E"
+   }
+  },
+  "ExportsOutputFnGetAttOmeroWebRepoC29DD82DArn7DDA0FC4": {
+   "Value": {
+    "Fn::GetAtt": [
+     "OmeroWebRepoC29DD82D",
+     "Arn"
+    ]
+   },
+   "Export": {
+    "Name": "ecr-omero-dev:ExportsOutputFnGetAttOmeroWebRepoC29DD82DArn7DDA0FC4"
+   }
+  },
+  "ExportsOutputRefOmeroWebRepoC29DD82D15E5D9BE": {
+   "Value": {
+    "Ref": "OmeroWebRepoC29DD82D"
+   },
+   "Export": {
+    "Name": "ecr-omero-dev:ExportsOutputRefOmeroWebRepoC29DD82D15E5D9BE"
+   }
+  }
+ },
+ "Parameters": {
+  "BootstrapVersion": {
+   "Type": "AWS::SSM::Parameter::Value<String>",
+   "Default": "/cdk-bootstrap/hnb659fds/version",
+   "Description": "Version of the CDK Bootstrap resources in this environment, automatically retrieved from SSM Parameter Store. [cdk:skip]"
+  }
+ },
+ "Rules": {
+  "CheckBootstrapVersion": {
+   "Assertions": [
+    {
+     "Assert": {
+      "Fn::Not": [
+       {
+        "Fn::Contains": [
+         [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5"
+         ],
+         {
+          "Ref": "BootstrapVersion"
+         }
+        ]
+       }
+      ]
+     },
+     "AssertDescription": "CDK bootstrap stack version 6 required. Please run 'cdk bootstrap' with a recent version of the CDK CLI."
+    }
+   ]
+  }
+ }
+}

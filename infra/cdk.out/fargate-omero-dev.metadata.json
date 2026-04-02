@@ -1,0 +1,386 @@
+{
+  "/fargate-omero-dev/PostgresService": [
+    {
+      "type": "aws:cdk:warning",
+      "data": "minHealthyPercent has not been configured so the default value of 50% is used. The number of running tasks will decrease below the desired count during deployments etc. See https://github.com/aws/aws-cdk/issues/31705 [ack: @aws-cdk/aws-ecs:minHealthyPercent]",
+      "trace": [
+        "Annotations.addMessage (/home/andres/proyectos/omero/infra/node_modules/aws-cdk-lib/core/lib/annotations.js:1:2270)",
+        "Annotations.addWarningV2 (/home/andres/proyectos/omero/infra/node_modules/aws-cdk-lib/core/lib/annotations.js:1:984)",
+        "new BaseService2 (/home/andres/proyectos/omero/infra/node_modules/aws-cdk-lib/aws-ecs/lib/base/base-service.js:1:12546)",
+        "new FargateService2 (/home/andres/proyectos/omero/infra/node_modules/aws-cdk-lib/aws-ecs/lib/fargate/fargate-service.js:1:6556)",
+        "new FargateService2 (/home/andres/proyectos/omero/infra/node_modules/aws-cdk-lib/core/lib/prop-injectable.js:1:726)",
+        "new FargateStack (/home/andres/proyectos/omero/infra/lib/compute/fargate-stack.ts:234:5)",
+        "Object.<anonymous> (/home/andres/proyectos/omero/infra/bin/omero-infra.ts:43:22)",
+        "Module._compile (node:internal/modules/cjs/loader:1706:14)",
+        "Module.m._compile (/home/andres/proyectos/omero/infra/node_modules/ts-node/src/index.ts:1618:23)",
+        "node:internal/modules/cjs/loader:1839:10",
+        "Object.require.extensions.<computed> [as .ts] (/home/andres/proyectos/omero/infra/node_modules/ts-node/src/index.ts:1621:12)",
+        "Module.load (node:internal/modules/cjs/loader:1441:32)",
+        "Function._load (node:internal/modules/cjs/loader:1263:12)",
+        "TracingChannel.traceSync (node:diagnostics_channel:328:14)",
+        "wrapModuleLoad (node:internal/modules/cjs/loader:237:24)",
+        "Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)",
+        "phase4 (/home/andres/proyectos/omero/infra/node_modules/ts-node/src/bin.ts:649:14)",
+        "bootstrap (/home/andres/proyectos/omero/infra/node_modules/ts-node/src/bin.ts:95:10)",
+        "main (/home/andres/proyectos/omero/infra/node_modules/ts-node/src/bin.ts:55:10)",
+        "Object.<anonymous> (/home/andres/proyectos/omero/infra/node_modules/ts-node/src/bin.ts:800:3)",
+        "Module._compile (node:internal/modules/cjs/loader:1706:14)",
+        "Object.<anonymous> (node:internal/modules/cjs/loader:1839:10)",
+        "Module.load (node:internal/modules/cjs/loader:1441:32)",
+        "Function._load (node:internal/modules/cjs/loader:1263:12)",
+        "TracingChannel.traceSync (node:diagnostics_channel:328:14)",
+        "wrapModuleLoad (node:internal/modules/cjs/loader:237:24)",
+        "Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)",
+        "node:internal/main/run_main_module:36:49"
+      ]
+    }
+  ],
+  "/fargate-omero-dev/ServerService": [
+    {
+      "type": "aws:cdk:warning",
+      "data": "minHealthyPercent has not been configured so the default value of 50% is used. The number of running tasks will decrease below the desired count during deployments etc. See https://github.com/aws/aws-cdk/issues/31705 [ack: @aws-cdk/aws-ecs:minHealthyPercent]",
+      "trace": [
+        "Annotations.addMessage (/home/andres/proyectos/omero/infra/node_modules/aws-cdk-lib/core/lib/annotations.js:1:2270)",
+        "Annotations.addWarningV2 (/home/andres/proyectos/omero/infra/node_modules/aws-cdk-lib/core/lib/annotations.js:1:984)",
+        "new BaseService2 (/home/andres/proyectos/omero/infra/node_modules/aws-cdk-lib/aws-ecs/lib/base/base-service.js:1:12546)",
+        "new FargateService2 (/home/andres/proyectos/omero/infra/node_modules/aws-cdk-lib/aws-ecs/lib/fargate/fargate-service.js:1:6556)",
+        "new FargateService2 (/home/andres/proyectos/omero/infra/node_modules/aws-cdk-lib/core/lib/prop-injectable.js:1:726)",
+        "new FargateStack (/home/andres/proyectos/omero/infra/lib/compute/fargate-stack.ts:281:5)",
+        "Object.<anonymous> (/home/andres/proyectos/omero/infra/bin/omero-infra.ts:43:22)",
+        "Module._compile (node:internal/modules/cjs/loader:1706:14)",
+        "Module.m._compile (/home/andres/proyectos/omero/infra/node_modules/ts-node/src/index.ts:1618:23)",
+        "node:internal/modules/cjs/loader:1839:10",
+        "Object.require.extensions.<computed> [as .ts] (/home/andres/proyectos/omero/infra/node_modules/ts-node/src/index.ts:1621:12)",
+        "Module.load (node:internal/modules/cjs/loader:1441:32)",
+        "Function._load (node:internal/modules/cjs/loader:1263:12)",
+        "TracingChannel.traceSync (node:diagnostics_channel:328:14)",
+        "wrapModuleLoad (node:internal/modules/cjs/loader:237:24)",
+        "Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)",
+        "phase4 (/home/andres/proyectos/omero/infra/node_modules/ts-node/src/bin.ts:649:14)",
+        "bootstrap (/home/andres/proyectos/omero/infra/node_modules/ts-node/src/bin.ts:95:10)",
+        "main (/home/andres/proyectos/omero/infra/node_modules/ts-node/src/bin.ts:55:10)",
+        "Object.<anonymous> (/home/andres/proyectos/omero/infra/node_modules/ts-node/src/bin.ts:800:3)",
+        "Module._compile (node:internal/modules/cjs/loader:1706:14)",
+        "Object.<anonymous> (node:internal/modules/cjs/loader:1839:10)",
+        "Module.load (node:internal/modules/cjs/loader:1441:32)",
+        "Function._load (node:internal/modules/cjs/loader:1263:12)",
+        "TracingChannel.traceSync (node:diagnostics_channel:328:14)",
+        "wrapModuleLoad (node:internal/modules/cjs/loader:237:24)",
+        "Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)",
+        "node:internal/main/run_main_module:36:49"
+      ]
+    }
+  ],
+  "/fargate-omero-dev/WebService": [
+    {
+      "type": "aws:cdk:warning",
+      "data": "minHealthyPercent has not been configured so the default value of 50% is used. The number of running tasks will decrease below the desired count during deployments etc. See https://github.com/aws/aws-cdk/issues/31705 [ack: @aws-cdk/aws-ecs:minHealthyPercent]",
+      "trace": [
+        "Annotations.addMessage (/home/andres/proyectos/omero/infra/node_modules/aws-cdk-lib/core/lib/annotations.js:1:2270)",
+        "Annotations.addWarningV2 (/home/andres/proyectos/omero/infra/node_modules/aws-cdk-lib/core/lib/annotations.js:1:984)",
+        "new BaseService2 (/home/andres/proyectos/omero/infra/node_modules/aws-cdk-lib/aws-ecs/lib/base/base-service.js:1:12546)",
+        "new FargateService2 (/home/andres/proyectos/omero/infra/node_modules/aws-cdk-lib/aws-ecs/lib/fargate/fargate-service.js:1:6556)",
+        "new FargateService2 (/home/andres/proyectos/omero/infra/node_modules/aws-cdk-lib/core/lib/prop-injectable.js:1:726)",
+        "new FargateStack (/home/andres/proyectos/omero/infra/lib/compute/fargate-stack.ts:323:5)",
+        "Object.<anonymous> (/home/andres/proyectos/omero/infra/bin/omero-infra.ts:43:22)",
+        "Module._compile (node:internal/modules/cjs/loader:1706:14)",
+        "Module.m._compile (/home/andres/proyectos/omero/infra/node_modules/ts-node/src/index.ts:1618:23)",
+        "node:internal/modules/cjs/loader:1839:10",
+        "Object.require.extensions.<computed> [as .ts] (/home/andres/proyectos/omero/infra/node_modules/ts-node/src/index.ts:1621:12)",
+        "Module.load (node:internal/modules/cjs/loader:1441:32)",
+        "Function._load (node:internal/modules/cjs/loader:1263:12)",
+        "TracingChannel.traceSync (node:diagnostics_channel:328:14)",
+        "wrapModuleLoad (node:internal/modules/cjs/loader:237:24)",
+        "Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)",
+        "phase4 (/home/andres/proyectos/omero/infra/node_modules/ts-node/src/bin.ts:649:14)",
+        "bootstrap (/home/andres/proyectos/omero/infra/node_modules/ts-node/src/bin.ts:95:10)",
+        "main (/home/andres/proyectos/omero/infra/node_modules/ts-node/src/bin.ts:55:10)",
+        "Object.<anonymous> (/home/andres/proyectos/omero/infra/node_modules/ts-node/src/bin.ts:800:3)",
+        "Module._compile (node:internal/modules/cjs/loader:1706:14)",
+        "Object.<anonymous> (node:internal/modules/cjs/loader:1839:10)",
+        "Module.load (node:internal/modules/cjs/loader:1441:32)",
+        "Function._load (node:internal/modules/cjs/loader:1263:12)",
+        "TracingChannel.traceSync (node:diagnostics_channel:328:14)",
+        "wrapModuleLoad (node:internal/modules/cjs/loader:237:24)",
+        "Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)",
+        "node:internal/main/run_main_module:36:49"
+      ]
+    }
+  ],
+  "/fargate-omero-dev/AlbDnsName": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "AlbDnsName"
+    }
+  ],
+  "/fargate-omero-dev/BootstrapVersion": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "BootstrapVersion"
+    }
+  ],
+  "/fargate-omero-dev/CheckBootstrapVersion": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "CheckBootstrapVersion"
+    }
+  ],
+  "/fargate-omero-dev/Namespace/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "Namespace9B63B8C8"
+    }
+  ],
+  "/fargate-omero-dev/Cluster/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "ClusterEB0386A7"
+    }
+  ],
+  "/fargate-omero-dev/EfsSg/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "EfsSgCAB16DA1"
+    }
+  ],
+  "/fargate-omero-dev/EfsSg/from fargateomerodevEcsSgF58AE88F:2049": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "EfsSgfromfargateomerodevEcsSgF58AE88F2049FF190FC2"
+    }
+  ],
+  "/fargate-omero-dev/PostgresEfs/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "PostgresEfs138EB62E"
+    }
+  ],
+  "/fargate-omero-dev/PostgresEfs/EfsMountTarget1": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "PostgresEfsEfsMountTarget1360A24AD"
+    }
+  ],
+  "/fargate-omero-dev/PostgresEfs/EfsMountTarget2": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "PostgresEfsEfsMountTarget2AA820D77"
+    }
+  ],
+  "/fargate-omero-dev/TaskRole/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "TaskRole30FC0FBB"
+    }
+  ],
+  "/fargate-omero-dev/AlbSg/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "AlbSg1155C1BE"
+    }
+  ],
+  "/fargate-omero-dev/EcsSg/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "EcsSg17B4B0B3"
+    }
+  ],
+  "/fargate-omero-dev/EcsSg/from fargateomerodevAlbSgE70F0311:4080": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "EcsSgfromfargateomerodevAlbSgE70F031140800EE88B0F"
+    }
+  ],
+  "/fargate-omero-dev/EcsSg/from fargateomerodevEcsSgF58AE88F:4064": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "EcsSgfromfargateomerodevEcsSgF58AE88F40647AFC6AE8"
+    }
+  ],
+  "/fargate-omero-dev/EcsSg/from fargateomerodevEcsSgF58AE88F:5432": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "EcsSgfromfargateomerodevEcsSgF58AE88F54322CAECBAA"
+    }
+  ],
+  "/fargate-omero-dev/Alb/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "Alb16C2F182"
+    }
+  ],
+  "/fargate-omero-dev/TgWeb/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "TgWebB0EE06C8"
+    }
+  ],
+  "/fargate-omero-dev/PostgresTaskDef/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "PostgresTaskDef8C46C666"
+    }
+  ],
+  "/fargate-omero-dev/PostgresService/Service": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "PostgresService76DC459C"
+    }
+  ],
+  "/fargate-omero-dev/ServerTaskDef/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "ServerTaskDef97C7EF27"
+    }
+  ],
+  "/fargate-omero-dev/ServerService/Service": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "ServerService5A7CA185"
+    }
+  ],
+  "/fargate-omero-dev/WebTaskDef/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "WebTaskDefDC37DBDB"
+    }
+  ],
+  "/fargate-omero-dev/WebService/Service": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "WebService7F8A1763"
+    }
+  ],
+  "/fargate-omero-dev/AutoRegisterTargets/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "AutoRegisterTargets9B45660A"
+    }
+  ],
+  "/fargate-omero-dev/EcsTaskStateRule/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "EcsTaskStateRuleE281192D"
+    }
+  ],
+  "/fargate-omero-dev/EcsTaskStateRule/AllowEventRulefargateomerodevAutoRegisterTargets806DF486": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "EcsTaskStateRuleAllowEventRulefargateomerodevAutoRegisterTargets806DF486EF41ECF5"
+    }
+  ],
+  "/fargate-omero-dev/AlbAliasRecord/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "AlbAliasRecord34710EAC"
+    }
+  ],
+  "/fargate-omero-dev/CDKMetadata/Default": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "CDKMetadata"
+    }
+  ],
+  "/fargate-omero-dev/PostgresEfs/PostgresAccessPoint/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "PostgresEfsPostgresAccessPoint185E88D4"
+    }
+  ],
+  "/fargate-omero-dev/TaskRole/DefaultPolicy/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "TaskRoleDefaultPolicy07FC53DE"
+    }
+  ],
+  "/fargate-omero-dev/Alb/HttpsListener/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "AlbHttpsListener2ADA614F"
+    }
+  ],
+  "/fargate-omero-dev/Alb/HttpListener/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "AlbHttpListener00C8B33E"
+    }
+  ],
+  "/fargate-omero-dev/PostgresTaskDef/ExecutionRole/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "PostgresTaskDefExecutionRole651CF4B2"
+    }
+  ],
+  "/fargate-omero-dev/PostgresService/CloudmapService/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "PostgresServiceCloudmapService4265E726"
+    }
+  ],
+  "/fargate-omero-dev/ServerTaskDef/ExecutionRole/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "ServerTaskDefExecutionRole5F859A5A"
+    }
+  ],
+  "/fargate-omero-dev/ServerService/CloudmapService/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "ServerServiceCloudmapService529F96B1"
+    }
+  ],
+  "/fargate-omero-dev/WebTaskDef/ExecutionRole/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "WebTaskDefExecutionRoleA6D04B61"
+    }
+  ],
+  "/fargate-omero-dev/AutoRegisterTargets/ServiceRole/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "AutoRegisterTargetsServiceRoleDA8B1BAE"
+    }
+  ],
+  "/fargate-omero-dev/PostgresTaskDef/ExecutionRole/DefaultPolicy/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "PostgresTaskDefExecutionRoleDefaultPolicy41CBF6F0"
+    }
+  ],
+  "/fargate-omero-dev/PostgresTaskDef/postgres/LogGroup/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "PostgresTaskDefpostgresLogGroup5B379689"
+    }
+  ],
+  "/fargate-omero-dev/ServerTaskDef/ExecutionRole/DefaultPolicy/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "ServerTaskDefExecutionRoleDefaultPolicy4B2E7F11"
+    }
+  ],
+  "/fargate-omero-dev/ServerTaskDef/omeroserver/LogGroup/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "ServerTaskDefomeroserverLogGroupA77ECFD6"
+    }
+  ],
+  "/fargate-omero-dev/WebTaskDef/ExecutionRole/DefaultPolicy/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "WebTaskDefExecutionRoleDefaultPolicyABD5D4E0"
+    }
+  ],
+  "/fargate-omero-dev/WebTaskDef/omeroweb/LogGroup/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "WebTaskDefomerowebLogGroupB3FA438B"
+    }
+  ],
+  "/fargate-omero-dev/AutoRegisterTargets/ServiceRole/DefaultPolicy/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "AutoRegisterTargetsServiceRoleDefaultPolicy4F95EAE1"
+    }
+  ]
+}

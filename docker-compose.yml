@@ -1,0 +1,50 @@
+version: "3"
+
+services:
+  database:
+    image: postgres:14
+    environment:
+      POSTGRES_USER: omero
+      POSTGRES_DB: omero
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-omero}
+    volumes:
+      - ./data/db:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  omeroserver:
+    image: openmicroscopy/omero-server:5.6.17
+    environment:
+      CONFIG_omero_db_host: database
+      CONFIG_omero_db_user: omero
+      CONFIG_omero_db_pass: ${POSTGRES_PASSWORD:-omero}
+      CONFIG_omero_db_name: omero
+      ROOTPASS: ${OMERO_ROOT_PASSWORD:-omero}
+      # Soporte para archivos grandes (.ndpi hasta 5GB)
+      CONFIG_omero_jvmcfg_percent_blitz: "50"
+      CONFIG_omero_jvmcfg_percent_indexer: "15"
+      CONFIG_omero_jvmcfg_percent_pixeldata: "15"
+      CONFIG_omero_pixeldata_max__plane__float__override: "true"
+    ports:
+      - "4064:4064"
+    volumes:
+      - ./data/omero:/OMERO
+    depends_on:
+      - database
+    restart: unless-stopped
+
+  omeroweb:
+    image: openmicroscopy/omero-web-standalone:5.31.0
+    environment:
+      OMEROHOST: omeroserver
+      # URL pública del servidor (cambiar por dominio real)
+      CONFIG_omero_web_public_server_id: "1"
+      CONFIG_omero_web_apps_append: "omero_iviewer"
+      CONFIG_omero_web_open_with: '[{"name": "iViewer", "supported_objects": ["image"], "url": "iviewer_index"}]'
+      # Sesiones y timeout para archivos grandes
+      CONFIG_omero_web_session__engine: "django.contrib.sessions.backends.db"
+      CONFIG_omero_web_wsgi__timeout: "600"
+    ports:
+      - "4080:4080"
+    depends_on:
+      - omeroserver
+    restart: unless-stopped

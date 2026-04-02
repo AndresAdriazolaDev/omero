@@ -1,0 +1,21 @@
+{
+  "version": "53.0.0",
+  "files": {
+    "1b31e1449d8ce8ee308878e67eeb7e81b768cf0e02f734e713677f0d72f57ad3": {
+      "displayName": "fargate-omero-dev Template",
+      "source": {
+        "path": "fargate-omero-dev.template.json",
+        "packaging": "file"
+      },
+      "destinations": {
+        "250121277045-us-east-1-28bc9a65": {
+          "bucketName": "cdk-hnb659fds-assets-250121277045-us-east-1",
+          "objectKey": "1b31e1449d8ce8ee308878e67eeb7e81b768cf0e02f734e713677f0d72f57ad3.json",
+          "region": "us-east-1",
+          "assumeRoleArn": "arn:${AWS::Partition}:iam::250121277045:role/cdk-hnb659fds-file-publishing-role-250121277045-us-east-1"
+        }
+      }
+    }
+  },
+  "dockerImages": {}
+}

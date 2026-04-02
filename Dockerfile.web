@@ -1,0 +1,9 @@
+FROM openmicroscopy/omero-web-standalone:5.31.0
+
+# Configuración para funcionar detrás de ALB con SSL termination
+RUN echo '\n\
+USE_X_FORWARDED_HOST = True\n\
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")\n\
+SESSION_COOKIE_SECURE = True\n\
+CSRF_COOKIE_SECURE = True\n\
+' >> /opt/omero/web/venv-3.12/lib/python3.12/site-packages/omeroweb/local_settings.py
