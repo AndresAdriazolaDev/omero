@@ -8,7 +8,8 @@ import { S3Stack } from '../lib/storage/s3-stack';
 import { EcrStack } from '../lib/ecr/ecr-stack';
 import { FargateStack } from '../lib/compute/fargate-stack';
 import { Ec2Stack } from '../lib/compute/ec2-stack';
-import { UploaderStack } from '../lib/uploader/uploader-stack';
+import { FrontendStack } from '../lib/frontend/frontend-stack';
+import { ApiStack } from '../lib/api/api-stack';
 
 const app = new cdk.App();
 const environment = (app.node.tryGetContext('environment') as string) ?? 'ada';
@@ -24,6 +25,23 @@ const dnsStack = new DnsStack(app, `dns-omero-${environment}`, {
   ...(domainConfig ?? { domainName: '', hostedZoneId: '', hostedZoneName: '' }),
 });
 const s3Stack = new S3Stack(app, `s3-omero-${environment}`, { env, environment });
+
+const apiStack = new ApiStack(app, `api-omero-${environment}`, {
+  env,
+  environment,
+  omeroImagesBucket: s3Stack.omeroImagesBucket,
+});
+
+if (domainConfig) {
+  new FrontendStack(app, `frontend-omero-${environment}`, {
+    env,
+    environment,
+    hostedZoneId: domainConfig.hostedZoneId,
+    hostedZoneName: domainConfig.hostedZoneName,
+    uploaderDomain: `uploader.${domainConfig.hostedZoneName}`,
+    apiUrl: apiStack.apiUrl,
+  });
+}
 
 if (mode === 'fargate') {
   const ecrStack = new EcrStack(app, `ecr-omero-${environment}`, { env, environment });
@@ -49,16 +67,5 @@ if (mode === 'fargate') {
     importQueue: s3Stack.importQueue,
     certificate: dnsStack.certificate,
     ...domainConfig,
-  });
-}
-
-if (domainConfig) {
-  new UploaderStack(app, `uploader-omero-${environment}`, {
-    env,
-    environment,
-    omeroImagesBucket: s3Stack.omeroImagesBucket,
-    hostedZoneId: domainConfig.hostedZoneId,
-    hostedZoneName: domainConfig.hostedZoneName,
-    uploaderDomain: `uploader.${domainConfig.hostedZoneName}`,
   });
 }

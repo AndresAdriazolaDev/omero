@@ -6,8 +6,8 @@ import * as ecs from 'aws-cdk-lib/aws-ecs';
 import * as efs from 'aws-cdk-lib/aws-efs';
 import * as elb from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 import * as iam from 'aws-cdk-lib/aws-iam';
-import * as lambdaEvents from 'aws-cdk-lib/aws-lambda-event-sources';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as lambdaEvents from 'aws-cdk-lib/aws-lambda-event-sources';
 import * as route53 from 'aws-cdk-lib/aws-route53';
 import * as route53Targets from 'aws-cdk-lib/aws-route53-targets';
 import * as s3 from 'aws-cdk-lib/aws-s3';
@@ -132,20 +132,18 @@ interface OmeroServerProps extends SharedProps {
 }
 
 class OmeroServer extends Construct {
-  readonly taskDefinition: ecs.FargateTaskDefinition;
-
   constructor(scope: Construct, id: string, props: OmeroServerProps) {
     super(scope, id);
 
-    this.taskDefinition = new ecs.FargateTaskDefinition(this, 'TaskDef', {
+    const taskDef = new ecs.FargateTaskDefinition(this, 'TaskDef', {
       taskRole: props.taskRole,
       cpu: 1024,
       memoryLimitMiB: 2048,
       family: `ecs-td-omero-server-${props.environment}`,
     });
-    this.taskDefinition.addToExecutionRolePolicy(props.executionRolePolicy);
+    taskDef.addToExecutionRolePolicy(props.executionRolePolicy);
 
-    const container = this.taskDefinition.addContainer('omeroserver', {
+    const container = taskDef.addContainer('omeroserver', {
       image: ecs.ContainerImage.fromEcrRepository(props.serverRepo, 'latest'),
       logging: props.logging,
       environment: {
@@ -169,7 +167,7 @@ class OmeroServer extends Construct {
     new ecs.FargateService(this, 'Service', {
       cluster: props.cluster,
       serviceName: `ecs-svc-omero-server-${props.environment}`,
-      taskDefinition: this.taskDefinition,
+      taskDefinition: taskDef,
       desiredCount: 1,
       minHealthyPercent: 0,
       maxHealthyPercent: 100,
@@ -480,7 +478,7 @@ export class FargateStack extends cdk.Stack {
       vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
     });
 
-    let httpsListener: elb.ApplicationListener | undefined;
+    let httpsListener: elb.ApplicationListener;
 
     if (props.certificate) {
       httpsListener = this.alb.addListener('HttpsListener', {
@@ -502,8 +500,6 @@ export class FargateStack extends cdk.Stack {
       });
     }
 
-    const activeListener = httpsListener;
-
     // ── Services ─────────────────────────────────────────────────────────────
     new OmeroDatabase(this, 'Database', { ...sharedProps, efsSg });
 
@@ -516,7 +512,7 @@ export class FargateStack extends cdk.Stack {
     new OmeroWeb(this, 'Web', {
       ...sharedProps,
       webRepo: props.omeroWebRepo,
-      listener: activeListener,
+      listener: httpsListener,
       domainName: props.domainName,
     });
 

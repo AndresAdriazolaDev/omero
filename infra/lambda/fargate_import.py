@@ -59,11 +59,11 @@ def handler(event: dict, context: object) -> dict:
                             {'name': 'ROOTPASS', 'value': root_pass},
                         ],
                         'command': [
-                            'sleep 10',
-                            '&& wget -q -O /tmp/import.ndpi "$IMPORT_URL"',
-                            '&& /opt/omero/server/venv3/bin/omero -C import'
-                            ' -s "$OMERO_SERVER" -u root -w "$ROOTPASS" /tmp/import.ndpi',
-                            '&& rm -f /tmp/import.ndpi',
+                            'sleep 10'
+                            ' && wget -q -O /tmp/import.ndpi "$IMPORT_URL"'
+                            ' && /opt/omero/server/venv3/bin/omero -C import'
+                            ' -s "$OMERO_SERVER" -u root -w "$ROOTPASS" /tmp/import.ndpi'
+                            ' && rm -f /tmp/import.ndpi',
                         ],
                     }],
                 },
