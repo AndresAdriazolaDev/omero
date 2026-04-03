@@ -61,8 +61,10 @@ def handler(event: dict, context: object) -> dict:
                         'command': [
                             'sleep 10'
                             ' && wget -q -O /tmp/import.ndpi "$IMPORT_URL"'
-                            ' && /opt/omero/server/venv3/bin/omero -C import'
-                            ' -s "$OMERO_SERVER" -u root -w "$ROOTPASS" /tmp/import.ndpi'
+                            ' && /opt/omero/server/venv3/bin/omero import'
+                            ' -s "$OMERO_SERVER" -u root -w "$ROOTPASS"'
+                            ' --skip-minmax --no-upgrade-check'
+                            ' /tmp/import.ndpi'
                             ' && rm -f /tmp/import.ndpi',
                         ],
                     }],
