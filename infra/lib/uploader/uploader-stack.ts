@@ -1,18 +1,18 @@
 import * as cdk from 'aws-cdk-lib';
-import { Construct } from 'constructs';
-import { StackProps } from 'aws-cdk-lib';
-import * as s3 from 'aws-cdk-lib/aws-s3';
-import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
+import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
-import * as acm from 'aws-cdk-lib/aws-certificatemanager';
+import * as iam from 'aws-cdk-lib/aws-iam';
+import * as apigateway from 'aws-cdk-lib/aws-apigateway';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as route53 from 'aws-cdk-lib/aws-route53';
 import * as route53Targets from 'aws-cdk-lib/aws-route53-targets';
-import * as lambda from 'aws-cdk-lib/aws-lambda';
-import * as apigateway from 'aws-cdk-lib/aws-apigateway';
-import { Effect, PolicyStatement } from 'aws-cdk-lib/aws-iam';
+import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
+import { Construct } from 'constructs';
+import { applyTags } from '../utils/env-utils';
 
-export interface UploaderStackProps extends StackProps {
+export interface UploaderStackProps extends cdk.StackProps {
   environment: string;
   omeroImagesBucket: s3.Bucket;
   hostedZoneId: string;
@@ -23,32 +23,35 @@ export interface UploaderStackProps extends StackProps {
 export class UploaderStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: UploaderStackProps) {
     super(scope, id, props);
+    applyTags(this, props.environment);
 
     const hostedZone = route53.HostedZone.fromHostedZoneAttributes(this, 'HostedZone', {
       hostedZoneId: props.hostedZoneId,
       zoneName: props.hostedZoneName,
     });
 
-    // Certificado debe estar en us-east-1 para CloudFront
-    const certificate = new acm.Certificate(this, 'UploaderCert', {
+    const certificate = new acm.Certificate(this, 'Certificate', {
       domainName: props.uploaderDomain,
       validation: acm.CertificateValidation.fromDns(hostedZone),
     });
 
-    // Bucket para el sitio web estático
     const websiteBucket = new s3.Bucket(this, 'WebsiteBucket', {
-      bucketName: `s3-omero-uploader-${props.environment}`,
+      bucketName: `s3-omero-${props.environment}-uploader`,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
     });
 
-    // Lambda que genera presigned URL para subir a S3
     const presignLambda = new lambda.Function(this, 'PresignLambda', {
       runtime: lambda.Runtime.PYTHON_3_13,
       handler: 'index.handler',
       timeout: cdk.Duration.seconds(10),
       functionName: `lambda-omero-presign-${props.environment}`,
+      logGroup: new cdk.aws_logs.LogGroup(this, 'PresignLambdaLogGroup', {
+        logGroupName: `/aws/lambda/lambda-omero-presign-${props.environment}`,
+        retention: cdk.aws_logs.RetentionDays.ONE_WEEK,
+        removalPolicy: cdk.RemovalPolicy.DESTROY,
+      }),
       environment: {
         BUCKET_NAME: props.omeroImagesBucket.bucketName,
       },
@@ -79,13 +82,12 @@ def handler(event, context):
 `),
     });
 
-    presignLambda.addToRolePolicy(new PolicyStatement({
-      effect: Effect.ALLOW,
+    presignLambda.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
       actions: ['s3:PutObject'],
       resources: [`${props.omeroImagesBucket.bucketArn}/import/*`],
     }));
 
-    // API Gateway para la Lambda
     const api = new apigateway.RestApi(this, 'UploaderApi', {
       restApiName: `api-omero-uploader-${props.environment}`,
       defaultCorsPreflightOptions: {
@@ -99,7 +101,6 @@ def handler(event, context):
       new apigateway.LambdaIntegration(presignLambda),
     );
 
-    // Página web del uploader
     new s3deploy.BucketDeployment(this, 'WebsiteDeploy', {
       sources: [s3deploy.Source.data('index.html', `<!DOCTYPE html>
 <html lang="es">
@@ -176,7 +177,6 @@ def handler(event, context):
       destinationBucket: websiteBucket,
     });
 
-    // CloudFront
     const distribution = new cloudfront.Distribution(this, 'Distribution', {
       domainNames: [props.uploaderDomain],
       certificate,
@@ -188,7 +188,6 @@ def handler(event, context):
       defaultRootObject: 'index.html',
     });
 
-    // DNS
     new route53.ARecord(this, 'UploaderDns', {
       zone: hostedZone,
       recordName: props.uploaderDomain,

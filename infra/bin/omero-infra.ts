@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import 'source-map-support/register';
 import * as cdk from 'aws-cdk-lib';
-import { getEnv } from '../lib/utils/env-utils';
+import { getEnv, DOMAIN_CONFIGS, DeployMode, DomainConfig } from '../lib/utils/env-utils';
 import { VpcStack } from '../lib/network/vpc-stack';
 import { DnsStack } from '../lib/network/dns-stack';
 import { S3Stack } from '../lib/storage/s3-stack';
@@ -12,21 +12,17 @@ import { UploaderStack } from '../lib/uploader/uploader-stack';
 
 const app = new cdk.App();
 const environment = (app.node.tryGetContext('environment') as string) ?? 'ada';
-const mode = (app.node.tryGetContext('mode') as string) ?? 'fargate'; // 'fargate' | 'ec2'
+const mode = (app.node.tryGetContext('mode') as DeployMode) ?? 'fargate';
 const env = getEnv(environment);
 
-const domainConfigs: Record<string, { domainName: string; hostedZoneId: string; hostedZoneName: string }> = {
-  ada: {
-    domainName: 'omero.adatech.cl',
-    hostedZoneId: 'Z08821841LM73LXF3VWXS',
-    hostedZoneName: 'adatech.cl',
-  },
-};
-
-const domainConfig = domainConfigs[environment];
+const domainConfig: DomainConfig | undefined = DOMAIN_CONFIGS[environment];
 
 const vpcStack = new VpcStack(app, `vpc-omero-${environment}`, { env, environment });
-const dnsStack = new DnsStack(app, `dns-omero-${environment}`, { env, environment, ...domainConfig });
+const dnsStack = new DnsStack(app, `dns-omero-${environment}`, {
+  env,
+  environment,
+  ...(domainConfig ?? { domainName: '', hostedZoneId: '', hostedZoneName: '' }),
+});
 const s3Stack = new S3Stack(app, `s3-omero-${environment}`, { env, environment });
 
 if (mode === 'fargate') {
@@ -56,11 +52,13 @@ if (mode === 'fargate') {
   });
 }
 
-new UploaderStack(app, `uploader-omero-${environment}`, {
-  env,
-  environment,
-  omeroImagesBucket: s3Stack.omeroImagesBucket,
-  hostedZoneId: 'Z08821841LM73LXF3VWXS',
-  hostedZoneName: 'adatech.cl',
-  uploaderDomain: 'uploader.adatech.cl',
-});
+if (domainConfig) {
+  new UploaderStack(app, `uploader-omero-${environment}`, {
+    env,
+    environment,
+    omeroImagesBucket: s3Stack.omeroImagesBucket,
+    hostedZoneId: domainConfig.hostedZoneId,
+    hostedZoneName: domainConfig.hostedZoneName,
+    uploaderDomain: `uploader.${domainConfig.hostedZoneName}`,
+  });
+}

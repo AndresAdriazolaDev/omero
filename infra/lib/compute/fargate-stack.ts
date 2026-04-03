@@ -1,297 +1,215 @@
 import * as cdk from 'aws-cdk-lib';
-import { Construct } from 'constructs';
-import { StackProps } from 'aws-cdk-lib';
-import {
-  Cluster, AwsLogDriver, FargateTaskDefinition,
-  ContainerImage, Protocol, FargateService, Secret as EcsSecret,
-} from 'aws-cdk-lib/aws-ecs';
-import { Repository } from 'aws-cdk-lib/aws-ecr';
-import {
-  ApplicationLoadBalancer, ApplicationProtocol,
-  ApplicationTargetGroup, TargetType, ListenerAction,
-} from 'aws-cdk-lib/aws-elasticloadbalancingv2';
-import { Role, ServicePrincipal, PolicyStatement, Effect } from 'aws-cdk-lib/aws-iam';
-import { SecurityGroup, Port, Peer } from 'aws-cdk-lib/aws-ec2';
-import * as ec2 from 'aws-cdk-lib/aws-ec2';
-import * as efs from 'aws-cdk-lib/aws-efs';
 import * as acm from 'aws-cdk-lib/aws-certificatemanager';
+import * as ec2 from 'aws-cdk-lib/aws-ec2';
+import * as ecr from 'aws-cdk-lib/aws-ecr';
+import * as ecs from 'aws-cdk-lib/aws-ecs';
+import * as efs from 'aws-cdk-lib/aws-efs';
+import * as elb from 'aws-cdk-lib/aws-elasticloadbalancingv2';
+import * as iam from 'aws-cdk-lib/aws-iam';
+import * as lambdaEvents from 'aws-cdk-lib/aws-lambda-event-sources';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as route53 from 'aws-cdk-lib/aws-route53';
 import * as route53Targets from 'aws-cdk-lib/aws-route53-targets';
-import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as s3 from 'aws-cdk-lib/aws-s3';
-import * as lambda from 'aws-cdk-lib/aws-lambda';
-import * as events from 'aws-cdk-lib/aws-events';
-import * as targets from 'aws-cdk-lib/aws-events-targets';
-import * as sqs from 'aws-cdk-lib/aws-sqs';
-import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
+import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as servicediscovery from 'aws-cdk-lib/aws-servicediscovery';
+import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as path from 'path';
+import { Construct } from 'constructs';
+import { applyTags } from '../utils/env-utils';
 
-export interface FargateStackProps extends StackProps {
+// ── Shared props ──────────────────────────────────────────────────────────────
+
+interface SharedProps {
   environment: string;
   vpc: ec2.Vpc;
-  omeroServerRepo: Repository;
-  omeroWebRepo: Repository;
-  omeroPostgresRepo: Repository;
-  omeroImagesBucket: s3.Bucket;
-  importQueue: sqs.Queue;
-  domainName?: string;
-  hostedZoneId?: string;
-  hostedZoneName?: string;
-  certificate?: acm.ICertificate;
+  cluster: ecs.Cluster;
+  namespace: servicediscovery.PrivateDnsNamespace;
+  ecsSg: ec2.SecurityGroup;
+  taskRole: iam.Role;
+  executionRolePolicy: iam.PolicyStatement;
+  secrets: secretsmanager.ISecret;
+  logging: ecs.AwsLogDriver;
 }
 
-export class FargateStack extends cdk.Stack {
-  readonly alb: ApplicationLoadBalancer;
+// ── OmeroDatabase construct ───────────────────────────────────────────────────
 
-  constructor(scope: Construct, id: string, props: FargateStackProps) {
-    super(scope, id, props);
+interface OmeroDatabaseProps extends SharedProps {
+  efsSg: ec2.SecurityGroup;
+}
 
-    const vpc = props.vpc;
+class OmeroDatabase extends Construct {
+  constructor(scope: Construct, id: string, props: OmeroDatabaseProps) {
+    super(scope, id);
 
-    const namespace = new servicediscovery.PrivateDnsNamespace(this, 'Namespace', {
-      name: `omero-${props.environment}.local`,
-      vpc,
-    });
-
-    const cluster = new Cluster(this, 'Cluster', {
-      vpc,
-      clusterName: `ecs-cluster-omero-${props.environment}`,
-      containerInsights: false,
-    });
-
-    // ── EFS para PostgreSQL ───────────────────────────────────────────────────
-    const efsSg = new SecurityGroup(this, 'EfsSg', {
-      vpc,
-      securityGroupName: `omero-${props.environment}-efs-sg`,
-      description: 'OMERO EFS',
-      allowAllOutbound: false,
-    });
-
-    const efsFileSystem = new efs.FileSystem(this, 'PostgresEfs', {
-      vpc,
+    const fileSystem = new efs.FileSystem(this, 'FileSystem', {
+      vpc: props.vpc,
       fileSystemName: `efs-omero-${props.environment}-postgres`,
-      securityGroup: efsSg,
+      securityGroup: props.efsSg,
       removalPolicy: cdk.RemovalPolicy.RETAIN,
       lifecyclePolicy: efs.LifecyclePolicy.AFTER_30_DAYS,
       performanceMode: efs.PerformanceMode.GENERAL_PURPOSE,
       throughputMode: efs.ThroughputMode.BURSTING,
     });
 
-    const efsAccessPoint = efsFileSystem.addAccessPoint('PostgresAccessPoint', {
+    const accessPoint = fileSystem.addAccessPoint('AccessPoint', {
       path: '/postgres-data',
       createAcl: { ownerGid: '999', ownerUid: '999', permissions: '750' },
       posixUser: { gid: '999', uid: '999' },
     });
 
-    // ── IAM Task Role ─────────────────────────────────────────────────────────
-    const taskRole = new Role(this, 'TaskRole', {
-      roleName: `ecs-taskRole-omero-${props.environment}`,
-      assumedBy: new ServicePrincipal('ecs-tasks.amazonaws.com'),
-    });
-
-    taskRole.addToPolicy(new PolicyStatement({
-      effect: Effect.ALLOW,
-      actions: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject', 's3:ListBucket'],
-      resources: [props.omeroImagesBucket.bucketArn, `${props.omeroImagesBucket.bucketArn}/*`],
-    }));
-
-    taskRole.addToPolicy(new PolicyStatement({
-      effect: Effect.ALLOW,
-      actions: ['elasticfilesystem:ClientMount', 'elasticfilesystem:ClientWrite', 'elasticfilesystem:ClientRootAccess'],
-      resources: [efsFileSystem.fileSystemArn],
-    }));
-
-    const executionRolePolicy = new PolicyStatement({
-      effect: Effect.ALLOW,
-      resources: ['*'],
+    props.taskRole.addToPolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
       actions: [
-        'ecr:GetAuthorizationToken', 'ecr:BatchCheckLayerAvailability',
-        'ecr:GetDownloadUrlForLayer', 'ecr:BatchGetImage',
-        'logs:CreateLogStream', 'logs:PutLogEvents',
-        'secretsmanager:GetSecretValue',
+        'elasticfilesystem:ClientMount',
+        'elasticfilesystem:ClientWrite',
+        'elasticfilesystem:ClientRootAccess',
       ],
-    });
+      resources: [fileSystem.fileSystemArn],
+    }));
 
-    const logging = new AwsLogDriver({
-      streamPrefix: `ecs-omero-${props.environment}`,
-      logRetention: cdk.aws_logs.RetentionDays.ONE_WEEK,
-    });
-
-    // ── Security Groups ───────────────────────────────────────────────────────
-    const albSg = new SecurityGroup(this, 'AlbSg', {
-      vpc,
-      securityGroupName: `omero-${props.environment}-alb-sg`,
-      description: 'OMERO ALB',
-      allowAllOutbound: true,
-    });
-    albSg.addIngressRule(Peer.anyIpv4(), Port.tcp(443), 'HTTPS');
-    albSg.addIngressRule(Peer.anyIpv4(), Port.tcp(80), 'HTTP redirect');
-
-    const ecsSg = new SecurityGroup(this, 'EcsSg', {
-      vpc,
-      securityGroupName: `omero-${props.environment}-ecs-sg`,
-      description: 'OMERO ECS tasks',
-      allowAllOutbound: true,
-    });
-    ecsSg.addIngressRule(albSg, Port.tcp(4080), 'alb-to-web');
-    ecsSg.addIngressRule(ecsSg, Port.tcp(4064), 'web-to-server');
-    ecsSg.addIngressRule(ecsSg, Port.tcp(5432), 'server-to-postgres');
-    efsSg.addIngressRule(ecsSg, Port.tcp(2049), 'ecs-to-efs');
-
-    // ── ALB ───────────────────────────────────────────────────────────────────
-    this.alb = new ApplicationLoadBalancer(this, 'Alb', {
-      vpc,
-      internetFacing: true,
-      loadBalancerName: `alb-omero-${props.environment}`,
-      securityGroup: albSg,
-      vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
-    });
-
-    const targetGroup = new ApplicationTargetGroup(this, 'TgWeb', {
-      vpc,
-      port: 4080,
-      protocol: ApplicationProtocol.HTTP,
-      targetType: TargetType.IP,
-      targetGroupName: `tg-omero-web-${props.environment}`,
-      healthCheck: {
-        path: '/static/omeroweb/css/ome.body.css',
-        interval: cdk.Duration.seconds(30),
-        timeout: cdk.Duration.seconds(10),
-        healthyThresholdCount: 2,
-        unhealthyThresholdCount: 3,
-        healthyHttpCodes: '200,301,302,400',
-      },
-      deregistrationDelay: cdk.Duration.seconds(30),
-    });
-
-    if (props.certificate) {
-      this.alb.addListener('HttpsListener', {
-        port: 443,
-        protocol: ApplicationProtocol.HTTPS,
-        certificates: [props.certificate],
-        defaultAction: ListenerAction.forward([targetGroup]),
-      });
-      this.alb.addListener('HttpListener', {
-        port: 80,
-        protocol: ApplicationProtocol.HTTP,
-        defaultAction: ListenerAction.redirect({ protocol: 'HTTPS', port: '443', permanent: true }),
-      });
-    } else {
-      this.alb.addListener('HttpListener', {
-        port: 80,
-        protocol: ApplicationProtocol.HTTP,
-        defaultAction: ListenerAction.forward([targetGroup]),
-      });
-    }
-
-    const omeroSecrets = secretsmanager.Secret.fromSecretNameV2(
-      this, 'OmeroSecrets', `omero-${props.environment}-secrets`
-    );
-
-    // ── POSTGRES ──────────────────────────────────────────────────────────────
-    const postgresTaskDef = new FargateTaskDefinition(this, 'PostgresTaskDef', {
-      taskRole,
+    const taskDef = new ecs.FargateTaskDefinition(this, 'TaskDef', {
+      taskRole: props.taskRole,
       cpu: 256,
       memoryLimitMiB: 512,
       family: `ecs-td-omero-postgres-${props.environment}`,
       volumes: [{
         name: 'postgres-data',
         efsVolumeConfiguration: {
-          fileSystemId: efsFileSystem.fileSystemId,
+          fileSystemId: fileSystem.fileSystemId,
           transitEncryption: 'ENABLED',
-          authorizationConfig: { accessPointId: efsAccessPoint.accessPointId, iam: 'ENABLED' },
+          authorizationConfig: { accessPointId: accessPoint.accessPointId, iam: 'ENABLED' },
         },
       }],
     });
-    postgresTaskDef.addToExecutionRolePolicy(executionRolePolicy);
+    taskDef.addToExecutionRolePolicy(props.executionRolePolicy);
 
-    const postgresContainer = postgresTaskDef.addContainer('postgres', {
-      image: ContainerImage.fromEcrRepository(props.omeroPostgresRepo, 'latest'),
-      logging,
+    const container = taskDef.addContainer('postgres', {
+      image: ecs.ContainerImage.fromRegistry('postgres:14'),
+      logging: props.logging,
       environment: { POSTGRES_DB: 'omero', POSTGRES_USER: 'omero' },
-      secrets: { POSTGRES_PASSWORD: EcsSecret.fromSecretsManager(omeroSecrets, 'POSTGRES_PASSWORD') },
+      secrets: {
+        POSTGRES_PASSWORD: ecs.Secret.fromSecretsManager(props.secrets, 'POSTGRES_PASSWORD'),
+      },
       stopTimeout: cdk.Duration.seconds(30),
+      healthCheck: {
+        command: ['CMD-SHELL', 'pg_isready -U omero'],
+        interval: cdk.Duration.seconds(10),
+        timeout: cdk.Duration.seconds(5),
+        retries: 5,
+        startPeriod: cdk.Duration.seconds(30),
+      },
     });
-    postgresContainer.addPortMappings({ containerPort: 5432, protocol: Protocol.TCP, name: 'postgres' });
-    postgresContainer.addMountPoints({ sourceVolume: 'postgres-data', containerPath: '/var/lib/postgresql/data', readOnly: false });
+    container.addPortMappings({ containerPort: 5432, protocol: ecs.Protocol.TCP, name: 'postgres' });
+    container.addMountPoints({ sourceVolume: 'postgres-data', containerPath: '/var/lib/postgresql/data', readOnly: false });
 
-    new FargateService(this, 'PostgresService', {
-      cluster,
+    new ecs.FargateService(this, 'Service', {
+      cluster: props.cluster,
       serviceName: `ecs-svc-omero-postgres-${props.environment}`,
-      taskDefinition: postgresTaskDef,
+      taskDefinition: taskDef,
       desiredCount: 1,
-      securityGroups: [ecsSg],
+      minHealthyPercent: 0,
+      maxHealthyPercent: 100,
+      securityGroups: [props.ecsSg],
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
       circuitBreaker: { rollback: true },
       enableExecuteCommand: true,
       cloudMapOptions: {
         name: 'postgres',
-        cloudMapNamespace: namespace,
+        cloudMapNamespace: props.namespace,
         dnsRecordType: servicediscovery.DnsRecordType.A,
         dnsTtl: cdk.Duration.seconds(10),
       },
     });
+  }
+}
 
-    // ── OMERO SERVER ──────────────────────────────────────────────────────────
-    const serverTaskDef = new FargateTaskDefinition(this, 'ServerTaskDef', {
-      taskRole,
+// ── OmeroServer construct ─────────────────────────────────────────────────────
+
+interface OmeroServerProps extends SharedProps {
+  serverRepo: ecr.Repository;
+  imagesBucket: s3.Bucket;
+}
+
+class OmeroServer extends Construct {
+  readonly taskDefinition: ecs.FargateTaskDefinition;
+
+  constructor(scope: Construct, id: string, props: OmeroServerProps) {
+    super(scope, id);
+
+    this.taskDefinition = new ecs.FargateTaskDefinition(this, 'TaskDef', {
+      taskRole: props.taskRole,
       cpu: 1024,
       memoryLimitMiB: 2048,
       family: `ecs-td-omero-server-${props.environment}`,
     });
-    serverTaskDef.addToExecutionRolePolicy(executionRolePolicy);
+    this.taskDefinition.addToExecutionRolePolicy(props.executionRolePolicy);
 
-    const serverContainer = serverTaskDef.addContainer('omeroserver', {
-      image: ContainerImage.fromEcrRepository(props.omeroServerRepo, 'latest'),
-      logging,
+    const container = this.taskDefinition.addContainer('omeroserver', {
+      image: ecs.ContainerImage.fromEcrRepository(props.serverRepo, 'latest'),
+      logging: props.logging,
       environment: {
         CONFIG_omero_db_host: `postgres.omero-${props.environment}.local`,
         CONFIG_omero_db_name: 'omero',
         CONFIG_omero_db_user: 'omero',
-        CONFIG_omero_managed_repository: `s3://${props.omeroImagesBucket.bucketName}/managed`,
-        CONFIG_omero_s3_bucket: props.omeroImagesBucket.bucketName,
-        CONFIG_omero_s3_region: this.region,
+        CONFIG_omero_managed_repository: `s3://${props.imagesBucket.bucketName}/managed`,
+        CONFIG_omero_s3_bucket: props.imagesBucket.bucketName,
+        CONFIG_omero_s3_region: cdk.Stack.of(scope).region,
         CONFIG_omero_jvmcfg_percent_blitz: '50',
         CONFIG_omero_jvmcfg_percent_pixeldata: '20',
       },
       secrets: {
-        CONFIG_omero_db_pass: EcsSecret.fromSecretsManager(omeroSecrets, 'POSTGRES_PASSWORD'),
-        ROOTPASS: EcsSecret.fromSecretsManager(omeroSecrets, 'OMERO_ROOT_PASSWORD'),
+        CONFIG_omero_db_pass: ecs.Secret.fromSecretsManager(props.secrets, 'POSTGRES_PASSWORD'),
+        ROOTPASS: ecs.Secret.fromSecretsManager(props.secrets, 'OMERO_ROOT_PASSWORD'),
       },
       stopTimeout: cdk.Duration.seconds(30),
     });
-    serverContainer.addPortMappings({ containerPort: 4064, protocol: Protocol.TCP, name: 'omero-server' });
+    container.addPortMappings({ containerPort: 4064, protocol: ecs.Protocol.TCP, name: 'omero-server' });
 
-    new FargateService(this, 'ServerService', {
-      cluster,
+    new ecs.FargateService(this, 'Service', {
+      cluster: props.cluster,
       serviceName: `ecs-svc-omero-server-${props.environment}`,
-      taskDefinition: serverTaskDef,
+      taskDefinition: this.taskDefinition,
       desiredCount: 1,
-      securityGroups: [ecsSg],
+      minHealthyPercent: 0,
+      maxHealthyPercent: 100,
+      securityGroups: [props.ecsSg],
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
       circuitBreaker: { rollback: true },
       enableExecuteCommand: true,
       cloudMapOptions: {
         name: 'server',
-        cloudMapNamespace: namespace,
+        cloudMapNamespace: props.namespace,
         dnsRecordType: servicediscovery.DnsRecordType.A,
         dnsTtl: cdk.Duration.seconds(10),
       },
     });
+  }
+}
 
-    // ── OMERO WEB ─────────────────────────────────────────────────────────────
-    const webTaskDef = new FargateTaskDefinition(this, 'WebTaskDef', {
-      taskRole,
+// ── OmeroWeb construct ────────────────────────────────────────────────────────
+
+interface OmeroWebProps extends SharedProps {
+  webRepo: ecr.Repository;
+  listener: elb.ApplicationListener;
+  domainName?: string;
+}
+
+class OmeroWeb extends Construct {
+  constructor(scope: Construct, id: string, props: OmeroWebProps) {
+    super(scope, id);
+
+    const taskDef = new ecs.FargateTaskDefinition(this, 'TaskDef', {
+      taskRole: props.taskRole,
       cpu: 512,
       memoryLimitMiB: 1024,
       family: `ecs-td-omero-web-${props.environment}`,
     });
-    webTaskDef.addToExecutionRolePolicy(executionRolePolicy);
+    taskDef.addToExecutionRolePolicy(props.executionRolePolicy);
 
-    const webContainer = webTaskDef.addContainer('omeroweb', {
-      image: ContainerImage.fromEcrRepository(props.omeroWebRepo, 'latest'),
-      logging,
+    const container = taskDef.addContainer('omeroweb', {
+      image: ecs.ContainerImage.fromEcrRepository(props.webRepo, 'latest'),
+      logging: props.logging,
       environment: {
         OMEROHOST: `server.omero-${props.environment}.local`,
         CONFIG_omero_web_apps_append: 'omero_iviewer',
@@ -308,32 +226,73 @@ export class FargateStack extends cdk.Stack {
       },
       stopTimeout: cdk.Duration.seconds(30),
     });
-    webContainer.addPortMappings({ containerPort: 4080, protocol: Protocol.TCP, name: 'omero-web' });
+    container.addPortMappings({ containerPort: 4080, protocol: ecs.Protocol.TCP, name: 'omero-web' });
 
-    new FargateService(this, 'WebService', {
-      cluster,
+    const service = new ecs.FargateService(this, 'Service', {
+      cluster: props.cluster,
       serviceName: `ecs-svc-omero-web-${props.environment}`,
-      taskDefinition: webTaskDef,
+      taskDefinition: taskDef,
       desiredCount: 1,
-      securityGroups: [ecsSg],
+      minHealthyPercent: 0,
+      maxHealthyPercent: 100,
+      securityGroups: [props.ecsSg],
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
-      circuitBreaker: { rollback: true },
+      circuitBreaker: { rollback: false },
       enableExecuteCommand: true,
     });
 
-    // ── Import Task efímero ───────────────────────────────────────────────────
-    const importTaskDef = new FargateTaskDefinition(this, 'ImportTaskDef', {
-      taskRole,
+    props.listener.addTargets('WebTargets', {
+      targetGroupName: `tg-omero-web-${props.environment}`,
+      port: 4080,
+      protocol: elb.ApplicationProtocol.HTTP,
+      targets: [service],
+      healthCheck: {
+        path: '/',
+        interval: cdk.Duration.seconds(30),
+        timeout: cdk.Duration.seconds(10),
+        healthyThresholdCount: 2,
+        unhealthyThresholdCount: 10,
+        healthyHttpCodes: '200,301,302,400,404',
+      },
+      deregistrationDelay: cdk.Duration.seconds(30),
+    });
+  }
+}
+
+// ── OmeroImportPipeline construct ─────────────────────────────────────────────
+
+interface OmeroImportPipelineProps {
+  environment: string;
+  vpc: ec2.Vpc;
+  cluster: ecs.Cluster;
+  ecsSg: ec2.SecurityGroup;
+  taskRole: iam.Role;
+  executionRolePolicy: iam.PolicyStatement;
+  serverRepo: ecr.Repository;
+  imagesBucket: s3.Bucket;
+  importQueue: sqs.Queue;
+  secrets: secretsmanager.ISecret;
+  logging: ecs.AwsLogDriver;
+}
+
+class OmeroImportPipeline extends Construct {
+  constructor(scope: Construct, id: string, props: OmeroImportPipelineProps) {
+    super(scope, id);
+
+    const stack = cdk.Stack.of(scope);
+
+    const importTaskDef = new ecs.FargateTaskDefinition(this, 'ImportTaskDef', {
+      taskRole: props.taskRole,
       cpu: 1024,
       memoryLimitMiB: 2048,
       family: `ecs-td-omero-import-${props.environment}`,
       ephemeralStorageGiB: 21,
     });
-    importTaskDef.addToExecutionRolePolicy(executionRolePolicy);
+    importTaskDef.addToExecutionRolePolicy(props.executionRolePolicy);
 
     importTaskDef.addContainer('omero-import', {
-      image: ContainerImage.fromEcrRepository(props.omeroServerRepo, 'latest'),
-      logging,
+      image: ecs.ContainerImage.fromEcrRepository(props.serverRepo, 'latest'),
+      logging: props.logging,
       essential: true,
       entryPoint: ['/bin/bash', '-c'],
       command: ['echo ready'],
@@ -341,112 +300,241 @@ export class FargateStack extends cdk.Stack {
         OMERO_SERVER: `server.omero-${props.environment}.local`,
       },
       secrets: {
-        ROOTPASS: EcsSecret.fromSecretsManager(omeroSecrets, 'OMERO_ROOT_PASSWORD'),
+        ROOTPASS: ecs.Secret.fromSecretsManager(props.secrets, 'OMERO_ROOT_PASSWORD'),
       },
     });
 
-    // ── Lambda importación via ECS run_task ───────────────────────────────────
     const importLambda = new lambda.Function(this, 'ImportLambda', {
       runtime: lambda.Runtime.PYTHON_3_13,
       handler: 'fargate_import.handler',
       timeout: cdk.Duration.minutes(1),
       functionName: `lambda-omero-import-${props.environment}`,
       reservedConcurrentExecutions: 1,
+      logGroup: new cdk.aws_logs.LogGroup(scope, 'ImportLambdaLogGroup', {
+        logGroupName: `/aws/lambda/lambda-omero-import-${props.environment}`,
+        retention: cdk.aws_logs.RetentionDays.ONE_WEEK,
+        removalPolicy: cdk.RemovalPolicy.DESTROY,
+      }),
       environment: {
         CLUSTER: `ecs-cluster-omero-${props.environment}`,
         TASK_DEF: importTaskDef.taskDefinitionArn,
-        SUBNET: vpc.privateSubnets[0].subnetId,
-        SECURITY_GROUP: ecsSg.securityGroupId,
+        SUBNET: props.vpc.privateSubnets[0].subnetId,
+        SECURITY_GROUP: props.ecsSg.securityGroupId,
         OMERO_SERVER: `server.omero-${props.environment}.local`,
         SECRET_ID: `omero-${props.environment}-secrets`,
-        REGION: this.region,
+        REGION: stack.region,
       },
       code: lambda.Code.fromAsset(path.join(__dirname, '../../lambda')),
     });
 
-    importLambda.addToRolePolicy(new PolicyStatement({
-      effect: Effect.ALLOW,
+    importLambda.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
       actions: ['ecs:RunTask'],
       resources: [importTaskDef.taskDefinitionArn],
     }));
 
-    importLambda.addToRolePolicy(new PolicyStatement({
-      effect: Effect.ALLOW,
+    importLambda.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
       actions: ['iam:PassRole'],
-      resources: [taskRole.roleArn, importTaskDef.executionRole!.roleArn],
+      resources: [props.taskRole.roleArn, importTaskDef.executionRole!.roleArn],
     }));
 
-    importLambda.addToRolePolicy(new PolicyStatement({
-      effect: Effect.ALLOW,
+    importLambda.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
       actions: ['s3:GetObject'],
-      resources: [`${props.omeroImagesBucket.bucketArn}/import/*`],
+      resources: [`${props.imagesBucket.bucketArn}/import/*`],
     }));
 
-    importLambda.addToRolePolicy(new PolicyStatement({
-      effect: Effect.ALLOW,
+    importLambda.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
       actions: ['secretsmanager:GetSecretValue'],
-      resources: [`arn:aws:secretsmanager:${this.region}:${this.account}:secret:omero-${props.environment}-secrets*`],
+      resources: [
+        `arn:aws:secretsmanager:${stack.region}:${stack.account}:secret:omero-${props.environment}-secrets*`,
+      ],
     }));
 
-    importLambda.addEventSource(new lambdaEventSources.SqsEventSource(props.importQueue, {
-      batchSize: 1,
-    }));
+    importLambda.addEventSource(new lambdaEvents.SqsEventSource(props.importQueue, { batchSize: 1 }));
+  }
+}
 
-    // ── Lambda auto-registro ALB ──────────────────────────────────────────────
-    const autoRegisterLambda = new lambda.Function(this, 'AutoRegisterTargets', {
-      runtime: lambda.Runtime.PYTHON_3_13,
-      handler: 'index.handler',
-      timeout: cdk.Duration.seconds(30),
-      functionName: `lambda-omero-register-targets-${props.environment}`,
-      code: lambda.Code.fromInline(`
-import boto3, logging
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+// ── FargateStack ──────────────────────────────────────────────────────────────
 
-def handler(event, context):
-    try:
-        elbv2 = boto3.client('elbv2')
-        detail = event['detail']
-        last_status = detail['lastStatus']
-        if 'omero-web' not in detail.get('group', ''):
-            return {'statusCode': 200}
-        for attachment in detail.get('attachments', []):
-            if attachment.get('type') == 'eni':
-                for d in attachment.get('details', []):
-                    if d.get('name') == 'privateIPv4Address':
-                        ip = d['value']
-                        az = detail.get('availabilityZone', '')
-                        tg_arn = '${targetGroup.targetGroupArn}'
-                        if last_status == 'RUNNING':
-                            elbv2.register_targets(TargetGroupArn=tg_arn, Targets=[{'Id': ip, 'Port': 4080, 'AvailabilityZone': az}])
-                        elif last_status == 'STOPPED':
-                            elbv2.deregister_targets(TargetGroupArn=tg_arn, Targets=[{'Id': ip, 'Port': 4080, 'AvailabilityZone': az}])
-                        return {'statusCode': 200}
-    except Exception as e:
-        logger.error(str(e))
-        return {'statusCode': 500}
-`),
+export interface FargateStackProps extends cdk.StackProps {
+  environment: string;
+  vpc: ec2.Vpc;
+  omeroServerRepo: ecr.Repository;
+  omeroWebRepo: ecr.Repository;
+  omeroPostgresRepo: ecr.Repository;
+  omeroImagesBucket: s3.Bucket;
+  importQueue: sqs.Queue;
+  domainName?: string;
+  hostedZoneId?: string;
+  hostedZoneName?: string;
+  certificate?: acm.ICertificate;
+}
+
+export class FargateStack extends cdk.Stack {
+  readonly alb: elb.ApplicationLoadBalancer;
+
+  constructor(scope: Construct, id: string, props: FargateStackProps) {
+    super(scope, id, props);
+    applyTags(this, props.environment);
+
+    // ── Service Discovery ───────────────────────────────────────────────────
+    const namespace = new servicediscovery.PrivateDnsNamespace(this, 'Namespace', {
+      name: `omero-${props.environment}.local`,
+      vpc: props.vpc,
     });
 
-    autoRegisterLambda.addToRolePolicy(new PolicyStatement({
-      effect: Effect.ALLOW,
-      actions: ['elasticloadbalancing:RegisterTargets', 'elasticloadbalancing:DeregisterTargets'],
+    const cluster = new ecs.Cluster(this, 'Cluster', {
+      vpc: props.vpc,
+      clusterName: `ecs-cluster-omero-${props.environment}`,
+      containerInsightsV2: ecs.ContainerInsights.DISABLED,
+    });
+
+    // ── Security Groups ─────────────────────────────────────────────────────
+    const efsSg = new ec2.SecurityGroup(this, 'EfsSg', {
+      vpc: props.vpc,
+      securityGroupName: `omero-${props.environment}-efs-sg`,
+      description: 'OMERO EFS',
+      allowAllOutbound: false,
+    });
+
+    const albSg = new ec2.SecurityGroup(this, 'AlbSg', {
+      vpc: props.vpc,
+      securityGroupName: `omero-${props.environment}-alb-sg`,
+      description: 'OMERO ALB',
+      allowAllOutbound: true,
+    });
+    albSg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(443), 'HTTPS');
+    albSg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(80), 'HTTP redirect');
+
+    const ecsSg = new ec2.SecurityGroup(this, 'EcsSg', {
+      vpc: props.vpc,
+      securityGroupName: `omero-${props.environment}-ecs-sg`,
+      description: 'OMERO ECS tasks',
+      allowAllOutbound: true,
+    });
+    ecsSg.addIngressRule(albSg, ec2.Port.tcp(4080), 'ALB to web');
+    ecsSg.addIngressRule(ecsSg, ec2.Port.tcp(4064), 'Web to server');
+    ecsSg.addIngressRule(ecsSg, ec2.Port.tcp(5432), 'Server to postgres');
+    efsSg.addIngressRule(ecsSg, ec2.Port.tcp(2049), 'ECS to EFS');
+
+    // ── IAM ─────────────────────────────────────────────────────────────────
+    const taskRole = new iam.Role(this, 'TaskRole', {
+      roleName: `ecs-task-role-omero-${props.environment}`,
+      assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
+    });
+
+    taskRole.addToPolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject', 's3:ListBucket'],
+      resources: [props.omeroImagesBucket.bucketArn, `${props.omeroImagesBucket.bucketArn}/*`],
+    }));
+
+    const executionRolePolicy = new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
       resources: ['*'],
-    }));
-
-    new events.Rule(this, 'EcsTaskStateRule', {
-      ruleName: `rule-omero-ecs-state-${props.environment}`,
-      eventPattern: {
-        source: ['aws.ecs'],
-        detailType: ['ECS Task State Change'],
-        detail: {
-          clusterArn: [cluster.clusterArn],
-          lastStatus: ['RUNNING', 'STOPPED'],
-        },
-      },
-      targets: [new targets.LambdaFunction(autoRegisterLambda)],
+      actions: [
+        'ecr:GetAuthorizationToken',
+        'ecr:BatchCheckLayerAvailability',
+        'ecr:GetDownloadUrlForLayer',
+        'ecr:BatchGetImage',
+        'logs:CreateLogStream',
+        'logs:PutLogEvents',
+        'secretsmanager:GetSecretValue',
+      ],
     });
 
+    const logging = new ecs.AwsLogDriver({
+      streamPrefix: `ecs-omero-${props.environment}`,
+      logGroup: new cdk.aws_logs.LogGroup(this, 'LogGroup', {
+        logGroupName: `/ecs/omero-${props.environment}`,
+        retention: cdk.aws_logs.RetentionDays.ONE_WEEK,
+        removalPolicy: cdk.RemovalPolicy.DESTROY,
+      }),
+    });
+
+    const omeroSecrets = secretsmanager.Secret.fromSecretNameV2(
+      this, 'OmeroSecrets', `omero-${props.environment}-secrets`,
+    );
+
+    const sharedProps: SharedProps = {
+      environment: props.environment,
+      vpc: props.vpc,
+      cluster,
+      namespace,
+      ecsSg,
+      taskRole,
+      executionRolePolicy,
+      secrets: omeroSecrets,
+      logging,
+    };
+
+    // ── ALB ─────────────────────────────────────────────────────────────────
+    this.alb = new elb.ApplicationLoadBalancer(this, 'Alb', {
+      vpc: props.vpc,
+      internetFacing: true,
+      loadBalancerName: `alb-omero-${props.environment}`,
+      securityGroup: albSg,
+      vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
+    });
+
+    let httpsListener: elb.ApplicationListener | undefined;
+
+    if (props.certificate) {
+      httpsListener = this.alb.addListener('HttpsListener', {
+        port: 443,
+        protocol: elb.ApplicationProtocol.HTTPS,
+        certificates: [props.certificate],
+        open: false,
+      });
+      this.alb.addListener('HttpListener', {
+        port: 80,
+        protocol: elb.ApplicationProtocol.HTTP,
+        defaultAction: elb.ListenerAction.redirect({ protocol: 'HTTPS', port: '443', permanent: true }),
+      });
+    } else {
+      httpsListener = this.alb.addListener('HttpListener', {
+        port: 80,
+        protocol: elb.ApplicationProtocol.HTTP,
+        open: false,
+      });
+    }
+
+    const activeListener = httpsListener;
+
+    // ── Services ─────────────────────────────────────────────────────────────
+    new OmeroDatabase(this, 'Database', { ...sharedProps, efsSg });
+
+    new OmeroServer(this, 'Server', {
+      ...sharedProps,
+      serverRepo: props.omeroServerRepo,
+      imagesBucket: props.omeroImagesBucket,
+    });
+
+    new OmeroWeb(this, 'Web', {
+      ...sharedProps,
+      webRepo: props.omeroWebRepo,
+      listener: activeListener,
+      domainName: props.domainName,
+    });
+
+    new OmeroImportPipeline(this, 'ImportPipeline', {
+      environment: props.environment,
+      vpc: props.vpc,
+      cluster,
+      ecsSg,
+      taskRole,
+      executionRolePolicy,
+      serverRepo: props.omeroServerRepo,
+      imagesBucket: props.omeroImagesBucket,
+      importQueue: props.importQueue,
+      secrets: omeroSecrets,
+      logging,
+    });
+
+    // ── DNS ──────────────────────────────────────────────────────────────────
     if (props.domainName && props.hostedZoneId && props.hostedZoneName) {
       const hostedZone = route53.HostedZone.fromHostedZoneAttributes(this, 'HostedZone', {
         hostedZoneId: props.hostedZoneId,

@@ -1,11 +1,11 @@
 import * as cdk from 'aws-cdk-lib';
-import { Construct } from 'constructs';
-import { StackProps } from 'aws-cdk-lib';
 import * as s3 from 'aws-cdk-lib/aws-s3';
-import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as s3n from 'aws-cdk-lib/aws-s3-notifications';
+import * as sqs from 'aws-cdk-lib/aws-sqs';
+import { Construct } from 'constructs';
+import { applyTags } from '../utils/env-utils';
 
-interface S3StackProps extends StackProps {
+interface S3StackProps extends cdk.StackProps {
   environment: string;
 }
 
@@ -16,6 +16,7 @@ export class S3Stack extends cdk.Stack {
 
   constructor(scope: Construct, id: string, props: S3StackProps) {
     super(scope, id, props);
+    applyTags(this, props.environment);
 
     this.omeroImagesBucket = new s3.Bucket(this, 'OmeroImagesBucket', {
       bucketName: `s3-omero-${props.environment}-images`,
@@ -44,11 +45,13 @@ export class S3Stack extends cdk.Stack {
     this.importDlq = new sqs.Queue(this, 'ImportDlq', {
       queueName: `sqs-omero-import-dlq-${props.environment}`,
       retentionPeriod: cdk.Duration.days(14),
+      encryption: sqs.QueueEncryption.SQS_MANAGED,
     });
 
     this.importQueue = new sqs.Queue(this, 'ImportQueue', {
       queueName: `sqs-omero-import-${props.environment}`,
       visibilityTimeout: cdk.Duration.minutes(15),
+      encryption: sqs.QueueEncryption.SQS_MANAGED,
       deadLetterQueue: { queue: this.importDlq, maxReceiveCount: 3 },
     });
 
@@ -58,7 +61,7 @@ export class S3Stack extends cdk.Stack {
       { prefix: 'import/' },
     );
 
-    new cdk.CfnOutput(this, 'OmeroImagesBucketName', {
+    new cdk.CfnOutput(this, 'BucketName', {
       value: this.omeroImagesBucket.bucketName,
       exportName: `s3-omero-${props.environment}-images-bucket`,
     });

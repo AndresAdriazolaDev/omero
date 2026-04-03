@@ -1,10 +1,10 @@
 import * as cdk from 'aws-cdk-lib';
-import { Construct } from 'constructs';
-import { StackProps } from 'aws-cdk-lib';
-import * as route53 from 'aws-cdk-lib/aws-route53';
 import * as acm from 'aws-cdk-lib/aws-certificatemanager';
+import * as route53 from 'aws-cdk-lib/aws-route53';
+import { Construct } from 'constructs';
+import { applyTags } from '../utils/env-utils';
 
-interface DnsStackProps extends StackProps {
+interface DnsStackProps extends cdk.StackProps {
   environment: string;
   domainName: string;
   hostedZoneId: string;
@@ -17,6 +17,7 @@ export class DnsStack extends cdk.Stack {
 
   constructor(scope: Construct, id: string, props: DnsStackProps) {
     super(scope, id, props);
+    applyTags(this, props.environment);
 
     this.hostedZone = route53.HostedZone.fromHostedZoneAttributes(this, 'HostedZone', {
       hostedZoneId: props.hostedZoneId,
